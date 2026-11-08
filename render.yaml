@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: cloud-notes-platform
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: MAX_UPLOAD_BYTES
+        value: "1048576"
+      - key: MAX_NOTE_CHARS
+        value: "1000"
+      - key: SUPABASE_BUCKET
+        value: codomax-files
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
