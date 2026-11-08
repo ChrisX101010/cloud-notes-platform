@@ -7,6 +7,25 @@ create table if not exists public.notes (
 
 alter table public.notes enable row level security;
 
--- No public anon policy is created intentionally.
--- The API server uses a server-only service role key and is the trust boundary.
--- Browser clients cannot directly read/write the table through the anon role.
+revoke all on table public.notes from anon, authenticated;
+revoke all on sequence public.notes_id_seq from anon, authenticated;
+
+create policy "deny anonymous note access"
+on public.notes
+for all
+to anon
+using (false)
+with check (false);
+
+create policy "deny authenticated direct note access"
+on public.notes
+for all
+to authenticated
+using (false)
+with check (false);
+
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('codomax-files', 'codomax-files', false, 1048576)
+on conflict (id) do update
+set public = false,
+    file_size_limit = 1048576;

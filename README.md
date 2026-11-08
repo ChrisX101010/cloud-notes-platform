@@ -1,107 +1,105 @@
 # Cloud Notes Platform
 
-A small cloud-native web application built for the Codomax Cloud Computing & DevOps internship Module 03.
+A live cloud-native application built for the Codomax Cloud Computing & DevOps internship Module 03.
 
-**Architecture:** FastAPI web service → Render compute → Supabase managed PostgreSQL + object storage → HTTPS networking, environment-scoped secrets, structured logs, health checks, and bounded request/upload sizes.
+**Production architecture:** Supabase Edge Function compute → managed PostgreSQL → private Supabase Storage → HTTPS networking → platform-provided server secrets → structured function/storage/database logs.
+
+## Live deployment
+
+- Application: https://ofkuwvuzlyigshwmdjhd.supabase.co/functions/v1/cloud-notes-platform
+- Health: https://ofkuwvuzlyigshwmdjhd.supabase.co/functions/v1/cloud-notes-platform/health
+- Status: https://ofkuwvuzlyigshwmdjhd.supabase.co/functions/v1/cloud-notes-platform/status
+
+Verified deployment state:
+
+- Edge Function: ACTIVE
+- health endpoint: HTTP 200
+- managed PostgreSQL: live
+- Row Level Security: enabled
+- direct anon/authenticated table access: explicitly denied
+- private object-storage bucket: `codomax-files`
+- bucket file limit: 1 MiB
+- deployment proof object: `module3/deployment-proof.txt`
+- Supabase security advisor: 0 findings
+- performance advisor: 0 findings
+- health advisor: 0 findings
 
 ## What this demonstrates
 
-- cloud compute through a managed web-service runtime;
+- serverless cloud compute;
 - managed PostgreSQL;
-- object storage;
+- private object storage;
 - public HTTPS networking;
-- environment variables and server-only secrets;
-- least-privilege application boundary;
-- application logging;
+- environment-scoped server secrets;
+- explicit IAM/RLS boundary;
+- structured application logging;
 - health monitoring;
-- explicit request/resource quotas;
-- deployable cloud architecture.
+- bounded resource quotas;
+- reproducible database and function configuration.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     U[Browser / API client]
-    R[Render Web Service<br/>FastAPI]
-    DB[(Supabase Postgres)]
-    ST[(Supabase Storage)]
-    LOG[Render Logs / Metrics]
-    ENV[Environment Secrets]
+    E[Supabase Edge Function<br/>Cloud compute]
+    DB[(Managed PostgreSQL)]
+    ST[(Private Supabase Storage)]
+    LOG[Function / Storage / PostgREST Logs]
+    ENV[Platform Environment Secrets]
 
-    U -->|HTTPS| R
-    ENV --> R
-    R -->|TLS| DB
-    R -->|TLS| ST
-    R --> LOG
+    U -->|HTTPS| E
+    ENV --> E
+    E --> DB
+    E --> ST
+    E --> LOG
 ```
 
-## API
+## Production endpoints
 
 - `GET /` — application metadata
 - `GET /health` — health probe
-- `GET /api/notes` — list notes
-- `POST /api/notes` — create a note
-- `POST /api/files` — upload a bounded file to object storage
+- `GET /demo-init` — idempotently creates one fixed database proof row and one fixed storage proof object
+- `GET /status` — returns database/storage verification state and resource limits
 
-## Required environment variables
+The public demo initializer cannot create arbitrary user-controlled rows or filenames, preventing unbounded public writes.
 
-```text
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_BUCKET=codomax-files
-APP_ENV=production
-MAX_UPLOAD_BYTES=1048576
-MAX_NOTE_CHARS=1000
-```
+## Security model
 
-`SUPABASE_SERVICE_ROLE_KEY` is a server secret. Never expose it to browser code or commit it to Git.
+The `public.notes` table has RLS enabled and explicit deny policies for both `anon` and `authenticated` roles. The Edge Function is the server-side trust boundary and uses Supabase platform-provided secret credentials that never appear in client code or Git.
 
-## Supabase setup
+The `codomax-files` bucket is private and limited to 1 MiB objects. The demo endpoint writes only the fixed `module3/deployment-proof.txt` object.
 
-Run `supabase/schema.sql` in the Supabase SQL editor, then create a private Storage bucket named `codomax-files`.
+## Resource controls
 
-## Local run
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# fill real values locally; .env is gitignored
-uvicorn app.main:app --reload
-```
-
-## Render deployment
-
-This repository includes `render.yaml`. Create a Render Web Service from the repository and set the Supabase environment variables in the Render dashboard. The service uses `/health` as its health-check endpoint.
-
-## Security notes
-
-- secrets live only in environment configuration;
-- `.env` is ignored by Git;
-- file uploads are capped by `MAX_UPLOAD_BYTES`;
-- note text is capped by `MAX_NOTE_CHARS`;
-- storage objects are written by the server only;
-- database/storage credentials are never returned by the API;
-- structured application logs avoid printing secrets;
-- the cloud service is reached only over HTTPS in normal hosted operation.
+- note title: 120 characters;
+- note body: 1,000 characters;
+- storage object: 1 MiB maximum;
+- public initializer: one fixed note + one fixed object;
+- direct client DB access: denied.
 
 ## Verification
 
-After deployment:
-
 ```bash
-curl -fsS https://YOUR-SERVICE.onrender.com/health
-curl -fsS https://YOUR-SERVICE.onrender.com/api/notes
+curl -fsS https://ofkuwvuzlyigshwmdjhd.supabase.co/functions/v1/cloud-notes-platform/health
+curl -fsS https://ofkuwvuzlyigshwmdjhd.supabase.co/functions/v1/cloud-notes-platform/status
 ```
 
-Create a note:
+Expected health response:
 
-```bash
-curl -fsS -X POST https://YOUR-SERVICE.onrender.com/api/notes \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Cloud deployment","body":"Module 03 is live."}'
+```json
+{"status":"ok","service":"cloud-notes-platform","module":3,"environment":"production"}
 ```
+
+Expected status includes one note, a private bucket, and the storage proof object.
+
+## Repository layout
+
+- `supabase/schema.sql` — database, RLS, and private bucket configuration
+- `supabase/functions/cloud-notes-platform/index.ts` — deployed Edge Function source
+- `app/` — portable FastAPI implementation retained as an alternative runtime
+- `docs/` — cloud-service and security/operations notes
+- `render.yaml` — optional alternative hosting blueprint, not the production deployment used for the Codomax submission
 
 ## Cloud-service mapping
 
